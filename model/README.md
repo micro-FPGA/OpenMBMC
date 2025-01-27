@@ -1,1 +1,1 @@
-Place your download device simulation models in this directory
+Place your downloaded device simulation models in this directory
