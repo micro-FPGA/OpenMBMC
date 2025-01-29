@@ -1,0 +1,1 @@
+This zip file should be installed into recent Radiant and Propel for the proper operation of the PLL on CR00103-03 (PCB revison 03).
