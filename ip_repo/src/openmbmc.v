@@ -10,7 +10,7 @@
 `define DEBUG_IO
 
 // Special define to test two register init with HyperRAM devices should never be defined unless testing in sim
-`define WRITE_CR1
+//`define WRITE_CR1
 
 // define this to enable tristate buffers in the code like with Quartus
 //`define BIDIR
@@ -200,7 +200,11 @@ begin
 `ifdef WRITE_CR1	    
 		num_regs_to_write       <= 2;
 `else
-		num_regs_to_write       <= 2;
+if (G_DEVICE == DEV_OPI) begin
+		num_regs_to_write       <= 2; // OPI needs two, Gigadevices needs 3!
+end else begin
+		num_regs_to_write       <= 1; // Normal init for HyperRAM
+end 		
 `endif		
 			    
 	end else begin
@@ -375,8 +379,17 @@ end
 					       hyper_dq_out_reg <= 8'b11111111; // 0xFF high byte of CR1
 					   end
 					   
-`else					   
-					   hyper_dq_out_reg <= 8'b10001111; // 0x8F high byte of CR0
+`else					
+if (G_DEVICE == DEV_OPI) begin
+					   if (num_regs_to_write == 0) begin
+					       hyper_dq_out_reg <= 8'b00100000; // 0x20 MR0, Fixed Latency, 3 clock read latency
+					   end else begin
+					       hyper_dq_out_reg <= 8'b00000000; // 0x00 MR4 3 clock write latency
+					   end
+					   
+end else begin
+                       hyper_dq_out_reg <= 8'b10001111; // 0x8F high byte of CR0
+end					   
 `endif					    
 					end else if(hyper_start_rd) begin
 						hyper_dq_out_oe		<= 0;
@@ -414,7 +427,7 @@ end
 					hyper_ck				<= 1;
 					
 					if(hyper_start_cr) begin
-					
+// this is DO NOT CARE for OPI devices...					
 `ifdef WRITE_CR1					   
 					   if (num_regs_to_write == 0) begin
 if (G_VARLAT == 1)	begin					   
@@ -431,7 +444,13 @@ end
 if (G_VARLAT == 1)	begin					   
 					   hyper_dq_out_reg <= 8'b11100111;   // 0xE7 low byte of CR0 VARIABLE LATENCY 3
 end else begin
+					   
+if (G_DEVICE == DEV_OPI) begin
+				       hyper_dq_out_reg <= 8'b00000000; // Write 0, but it is DO NOT CARE
+end else begin					   
 					   hyper_dq_out_reg <= 8'b11101111;   // 0xEF low byte of CR0 FIXED LATENCY 3
+end					       
+					   
 end					   
 
 `endif					    
@@ -1420,17 +1439,39 @@ begin
 		
 	end else begin
 	
-// register auto init	
+	
+	
+	
+// register auto init
+
+if (G_DEVICE == DEV_OPI) begin	
+	    // CR0 write data
+        if(hyper_start_cr) begin
+			   if (num_regs_to_write == 0) begin
+                        hyper_shift_reg[7:0]	<= 8'b00000000;					// address MR0 = 0
+			   end else begin
+	       			    hyper_shift_reg[7:0]	<= 8'b00000100;					// address MR4 = 4
+			   end
+					   
+			   hyper_shift_reg[15:8]	<= 8'b00000000;								// 
+			   hyper_shift_reg[23:16]	<= 8'b00000000;								// 
+			   hyper_shift_reg[31:24]	<= 8'b00000000;								//  
+			   hyper_shift_reg[39:32]	<= 8'b11000000;								// 0xC0
+			   hyper_shift_reg[47:40]   <= 8'b11000000; 							// 0xC0
+        end
+end        
+
+	
 if (G_DEVICE == DEV_HYPERRAM) begin	
 	    // CR0 write data
         if(hyper_start_cr) begin
 
 `ifdef WRITE_CR1					   
 					   if (num_regs_to_write == 0) begin
-                            hyper_shift_reg[7:0]	<= 8'b00000000;					// address CR0 = 1
+                            hyper_shift_reg[7:0]	<= 8'b00000000;					// address CR0 = 0
 					   end else begin
 					       
-		       			   hyper_shift_reg[7:0]	<= 8'b00000001;						// address CR0 = 0
+		       			   hyper_shift_reg[7:0]	<= 8'b00000001;						// address CR1 = 1
 					   end
 					   
 `else					   
@@ -1461,6 +1502,25 @@ end
 			if(!hyper_start_rd && !hyper_busy) begin
 				avl_mem_wr_rd_ready		<= 1'b0;
 				hyper_start_rd			= 1'b1;
+
+// HyperRAM read
+if (G_DEVICE == DEV_OPI) begin	
+
+`ifdef BYTEADDR
+
+`else
+
+`endif				
+
+   			   hyper_shift_reg[7:0]	    <= 8'b00000000;					// address
+			   hyper_shift_reg[15:8]	<= 8'b00000000;					// 
+			   hyper_shift_reg[23:16]	<= 8'b00000000;					// 
+			   hyper_shift_reg[31:24]	<= 8'b00000000;					//  
+			   hyper_shift_reg[39:32]	<= 8'b00000000;					// 0x00 READ
+			   hyper_shift_reg[47:40]   <= 8'b00000000; 				// 0x00
+
+end
+
 
 // HyperRAM read
 if (G_DEVICE == DEV_HYPERRAM) begin	
@@ -1514,6 +1574,24 @@ end
 			if(!hyper_start_wr && !hyper_busy) begin
 				avl_mem_wr_rd_ready		<= 1'b0;
 				hyper_start_wr			= 1'b1;
+
+if (G_DEVICE == DEV_OPI) begin	
+
+`ifdef BYTEADDR
+
+`else
+
+`endif				
+
+   			   hyper_shift_reg[7:0]	    <= 8'b00000000;					// address 
+			   hyper_shift_reg[15:8]	<= 8'b00000000;					// 
+			   hyper_shift_reg[23:16]	<= 8'b00000000;					// 
+			   hyper_shift_reg[31:24]	<= 8'b00000000;					//  
+			   hyper_shift_reg[39:32]	<= 8'b10000000;					// 0x80 WRIE
+			   hyper_shift_reg[47:40]   <= 8'b10000000; 				// 0x80
+
+end
+
 
 if (G_DEVICE == DEV_HYPERRAM) begin				
 				hyper_shift_reg[0]	    <= 1'b0;									       // 
