@@ -9,6 +9,9 @@
 //  do we include debug signals?
 `define DEBUG_IO
 
+// Special define to test two register init with HyperRAM devices should never be defined unless testing in sim
+`define WRITE_CR1
+
 // define this to enable tristate buffers in the code like with Quartus
 //`define BIDIR
 // define this to enable byte addressing, like in Vivado
@@ -101,6 +104,9 @@ reg avl_mem_readdatavalid_s;
 assign avl_mem_readdatavalid = avl_mem_readdatavalid_s;		
 `endif		
 
+reg [1:0] num_regs_to_write; // how many registers we need to write 
+
+
 reg avl_mem_wr_rd_ready;
 	
 // 
@@ -190,6 +196,13 @@ begin
 	    init_done_int           <= 1'b0;   
 	    
 	    hyper_start_cr          <= 1'b0;
+	    
+`ifdef WRITE_CR1	    
+		num_regs_to_write       <= 2;
+`else
+		num_regs_to_write       <= 2;
+`endif		
+			    
 	end else begin
 		// count for the tVCS to elapse
 if (G_DEVICE == DEV_HYPERFLASH) begin				
@@ -212,7 +225,7 @@ end else begin
 		  end
 		end 
 end		     
-	end
+	end 
 	
 	if(reset_rst || hyper_recovery_reg) begin
 		hyper_rst				<= 1'b0;
@@ -243,6 +256,10 @@ end
 					hyper_dq_out_oe		<= 0;
 					hyper_ck			<= 0;
 					hyper_dq_out_reg	<= 8'b00000000;
+					
+					if (num_regs_to_write != 0) begin
+					   num_regs_to_write <= num_regs_to_write - 1;
+					end
 				end
 
 				if(hyper_bus_state == 1) begin
@@ -349,7 +366,18 @@ end
 					hyper_ck				<= 0;
 					
 					if(hyper_start_cr) begin
-					   hyper_dq_out_reg <= 8'b10001111; // 0x8F high byte of CR0 
+					   
+					   
+`ifdef WRITE_CR1					   
+					   if (num_regs_to_write == 0) begin
+					       hyper_dq_out_reg <= 8'b10001111; // 0x8F high byte of CR0
+					   end else begin
+					       hyper_dq_out_reg <= 8'b11111111; // 0xFF high byte of CR1
+					   end
+					   
+`else					   
+					   hyper_dq_out_reg <= 8'b10001111; // 0x8F high byte of CR0
+`endif					    
 					end else if(hyper_start_rd) begin
 						hyper_dq_out_oe		<= 0;
 					end
@@ -386,12 +414,29 @@ end
 					hyper_ck				<= 1;
 					
 					if(hyper_start_cr) begin
+					
+`ifdef WRITE_CR1					   
+					   if (num_regs_to_write == 0) begin
 if (G_VARLAT == 1)	begin					   
 					   hyper_dq_out_reg <= 8'b11100111;   // 0xE7 low byte of CR0 VARIABLE LATENCY 3
 end else begin
 					   hyper_dq_out_reg <= 8'b11101111;   // 0xEF low byte of CR0 FIXED LATENCY 3
-
 end					   
+					   end else begin
+					       hyper_dq_out_reg <= 8'b11010001; // 0xD1 low byte of CR1
+					   end
+					   
+`else					   
+
+if (G_VARLAT == 1)	begin					   
+					   hyper_dq_out_reg <= 8'b11100111;   // 0xE7 low byte of CR0 VARIABLE LATENCY 3
+end else begin
+					   hyper_dq_out_reg <= 8'b11101111;   // 0xEF low byte of CR0 FIXED LATENCY 3
+end					   
+
+`endif					    
+				
+					
 					end else if(hyper_start_rd) begin
 						hyper_dq_out_oe		<= 0;
 					end
@@ -1339,6 +1384,10 @@ end
 					hyper_rwds_reg	= 1'b0;
 					hyper_rwds_oe	= 0;
 				end
+				
+				if ((init_done == 0) && (num_regs_to_write != 0)) begin
+				    hyper_bus_state <= 0; // Restart register write process!
+				end
 			end
 
 		end else begin
@@ -1366,13 +1415,28 @@ begin
 		avl_mem_readdatavalid_s	= 1'b0;
 		avl_mem_wr_rd_ready		<= 1'b0;
 		//avl_wr_reg				<= 1'b0;
+	
+
+		
 	end else begin
 	
 // register auto init	
 if (G_DEVICE == DEV_HYPERRAM) begin	
 	    // CR0 write data
         if(hyper_start_cr) begin
-				hyper_shift_reg[7:0]	<= 8'b00000000;								// address CR0 = 0
+
+`ifdef WRITE_CR1					   
+					   if (num_regs_to_write == 0) begin
+                            hyper_shift_reg[7:0]	<= 8'b00000000;					// address CR0 = 1
+					   end else begin
+					       
+		       			   hyper_shift_reg[7:0]	<= 8'b00000001;						// address CR0 = 0
+					   end
+					   
+`else					   
+				hyper_shift_reg[7:0]	<= 8'b00000000;								// address CR0 = 0				   
+`endif					    
+
 				hyper_shift_reg[15:8]	<= 8'b00000000;								// 
 				hyper_shift_reg[23:16]	<= 8'b00000000;								// 
 				hyper_shift_reg[31:24]	<= 8'b00000001;								// must be 0x01 
