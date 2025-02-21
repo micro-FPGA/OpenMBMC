@@ -307,7 +307,11 @@ end
 					hyper_dq_out_oe		<= 1;
 					hyper_dq_out_reg	<= hyper_shift_reg[23:16];
 					// latch latency from RWDS
+if (G_VARLAT == 1)	begin				
 					latency             <= rwds_s;
+end else begin
+                    latency             <= 1'b1;
+end					
 				end
 
 				if(hyper_bus_state == 11) begin
@@ -382,9 +386,12 @@ end
 					hyper_ck				<= 1;
 					
 					if(hyper_start_cr) begin
-					   //hyper_dq_out_reg <= 8'b00011111; // 0x1F low byte of CR0 LATENCY 6
-					   //hyper_dq_out_reg <= 8'b11101111;   // 0xEF low byte of CR0 FIXED LATENCY 3
-					   hyper_dq_out_reg <= 8'b11100111;   // 0xEF low byte of CR0 VARIABLE LATENCY 3
+if (G_VARLAT == 1)	begin					   
+					   hyper_dq_out_reg <= 8'b11100111;   // 0xE7 low byte of CR0 VARIABLE LATENCY 3
+end else begin
+					   hyper_dq_out_reg <= 8'b11101111;   // 0xEF low byte of CR0 FIXED LATENCY 3
+
+end					   
 					end else if(hyper_start_rd) begin
 						hyper_dq_out_oe		<= 0;
 					end
